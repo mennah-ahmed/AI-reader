@@ -1,9 +1,10 @@
 name: Build AI Reader APK
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -13,7 +14,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -24,7 +25,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build Debug APK
+      - name: Build APK
         run: gradle assembleDebug
 
       - name: Upload APK
@@ -32,4 +33,3 @@ jobs:
         with:
           name: AI-Reader-debug
           path: app/build/outputs/apk/debug/app-debug.apk
-app-debug.apk
