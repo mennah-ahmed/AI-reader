@@ -6,11 +6,12 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
-import android.speech.tts.TextToSpeech
+
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,10 +22,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+
 import androidx.compose.foundation.shape.RoundedCornerShape
+
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FloatingActionButton
@@ -34,21 +38,25 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+
 data class Book(
     val name: String,
     val uri: Uri
 )
+
 
 class MainActivity : ComponentActivity() {
 
@@ -62,6 +70,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
     @Composable
     private fun AIReaderApp() {
 
@@ -72,8 +81,8 @@ class MainActivity : ComponentActivity() {
         if (selectedBook == null) {
 
             HomeScreen(
-                onBookSelected = {
-                    selectedBook = it
+                onBookSelected = { book ->
+                    selectedBook = book
                 }
             )
 
@@ -88,35 +97,42 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
     private fun getFileName(uri: Uri): String {
 
         var name = "PDF Book"
 
-        contentResolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME),
-            null,
-            null,
-            null
-        )?.use { cursor ->
+        try {
 
-            if (cursor.moveToFirst()) {
+            contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
 
-                val index =
-                    cursor.getColumnIndex(
-                        OpenableColumns.DISPLAY_NAME
-                    )
+                if (cursor.moveToFirst()) {
 
-                if (index >= 0) {
-                    name =
-                        cursor.getString(index)
-                            ?: "PDF Book"
+                    val index =
+                        cursor.getColumnIndex(
+                            OpenableColumns.DISPLAY_NAME
+                        )
+
+                    if (index >= 0) {
+                        name =
+                            cursor.getString(index)
+                                ?: "PDF Book"
+                    }
                 }
             }
+
+        } catch (_: Exception) {
         }
 
         return name
     }
+
 
     @Composable
     private fun HomeScreen(
@@ -127,9 +143,11 @@ class MainActivity : ComponentActivity() {
             mutableStateOf<List<Book>>(emptyList())
         }
 
+
         val pdfLauncher =
             rememberLauncherForActivityResult(
-                ActivityResultContracts.OpenDocument()
+                contract =
+                    ActivityResultContracts.OpenDocument()
             ) { uri ->
 
                 if (uri != null) {
@@ -144,10 +162,13 @@ class MainActivity : ComponentActivity() {
                     } catch (_: Exception) {
                     }
 
-                    val book = Book(
-                        name = getFileName(uri),
-                        uri = uri
-                    )
+
+                    val book =
+                        Book(
+                            name = getFileName(uri),
+                            uri = uri
+                        )
+
 
                     books =
                         (books + book)
@@ -155,16 +176,20 @@ class MainActivity : ComponentActivity() {
                                 it.uri.toString()
                             }
 
+
                     onBookSelected(book)
                 }
             }
+
 
         Scaffold(
 
             topBar = {
 
                 TopAppBar(
+
                     title = {
+
                         Text(
                             text = "AI Reader",
                             fontSize = 24.sp
@@ -173,6 +198,7 @@ class MainActivity : ComponentActivity() {
                 )
             },
 
+
             floatingActionButton = {
 
                 FloatingActionButton(
@@ -180,7 +206,9 @@ class MainActivity : ComponentActivity() {
                     onClick = {
 
                         pdfLauncher.launch(
-                            arrayOf("application/pdf")
+                            arrayOf(
+                                "application/pdf"
+                            )
                         )
                     }
 
@@ -195,6 +223,7 @@ class MainActivity : ComponentActivity() {
 
         ) { padding ->
 
+
             Column(
 
                 modifier =
@@ -208,21 +237,28 @@ class MainActivity : ComponentActivity() {
                 Text(
                     text = "📚 My Library",
                     style =
-                        MaterialTheme.typography.headlineSmall
+                        MaterialTheme
+                            .typography
+                            .headlineSmall
                 )
+
 
                 Spacer(
                     modifier =
                         Modifier.height(16.dp)
                 )
 
+
                 if (books.isEmpty()) {
 
                     Card(
+
                         modifier =
                             Modifier.fillMaxWidth(),
+
                         shape =
                             RoundedCornerShape(20.dp)
+
                     ) {
 
                         Column(
@@ -242,10 +278,12 @@ class MainActivity : ComponentActivity() {
                                 fontSize = 60.sp
                             )
 
+
                             Spacer(
                                 modifier =
                                     Modifier.height(12.dp)
                             )
+
 
                             Text(
                                 text = "No books yet",
@@ -255,10 +293,12 @@ class MainActivity : ComponentActivity() {
                                         .titleLarge
                             )
 
+
                             Spacer(
                                 modifier =
                                     Modifier.height(6.dp)
                             )
+
 
                             Text(
                                 text =
@@ -290,7 +330,9 @@ class MainActivity : ComponentActivity() {
                                     Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            onBookSelected(book)
+                                            onBookSelected(
+                                                book
+                                            )
                                         },
 
                                 shape =
@@ -299,8 +341,10 @@ class MainActivity : ComponentActivity() {
                             ) {
 
                                 Column(
+
                                     modifier =
                                         Modifier.padding(16.dp)
+
                                 ) {
 
                                     Text(
@@ -308,20 +352,24 @@ class MainActivity : ComponentActivity() {
                                         fontSize = 45.sp
                                     )
 
+
                                     Spacer(
                                         modifier =
                                             Modifier.height(8.dp)
                                     )
+
 
                                     Text(
                                         text = book.name,
                                         maxLines = 2
                                     )
 
+
                                     Spacer(
                                         modifier =
                                             Modifier.height(5.dp)
                                     )
+
 
                                     Text(
                                         text = "Tap to read",
@@ -336,6 +384,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
     @Composable
     private fun ReaderScreen(
         book: Book,
@@ -346,25 +395,31 @@ class MainActivity : ComponentActivity() {
             mutableIntStateOf(1)
         }
 
+
         var totalPages by remember {
             mutableIntStateOf(0)
         }
+
 
         var showAiDialog by remember {
             mutableStateOf(false)
         }
 
+
         var showNoteDialog by remember {
             mutableStateOf(false)
         }
+
 
         var note by remember {
             mutableStateOf("")
         }
 
+
         var highlightCount by remember {
             mutableIntStateOf(0)
         }
+
 
         Scaffold(
 
@@ -373,11 +428,13 @@ class MainActivity : ComponentActivity() {
                 TopAppBar(
 
                     title = {
+
                         Text(
                             text = book.name,
                             maxLines = 1
                         )
                     },
+
 
                     navigationIcon = {
 
@@ -391,11 +448,14 @@ class MainActivity : ComponentActivity() {
                 )
             },
 
+
             bottomBar = {
 
                 Column(
+
                     modifier =
                         Modifier.fillMaxWidth()
+
                 ) {
 
                     Row(
@@ -410,38 +470,47 @@ class MainActivity : ComponentActivity() {
 
                     ) {
 
+
                         TextButton(
                             onClick = {
                                 showAiDialog = true
                             }
                         ) {
+
                             Text("🤖 AI")
                         }
 
+
                         TextButton(
                             onClick = {
-                                speakPage(currentPage)
+                                showAiDialog = true
                             }
                         ) {
+
                             Text("🔊 Read")
                         }
+
 
                         TextButton(
                             onClick = {
                                 showNoteDialog = true
                             }
                         ) {
+
                             Text("📝 Note")
                         }
+
 
                         TextButton(
                             onClick = {
                                 highlightCount++
                             }
                         ) {
+
                             Text("🖍 Highlight")
                         }
                     }
+
 
                     Row(
 
@@ -458,6 +527,7 @@ class MainActivity : ComponentActivity() {
 
                     ) {
 
+
                         TextButton(
 
                             enabled =
@@ -471,8 +541,10 @@ class MainActivity : ComponentActivity() {
                             }
 
                         ) {
+
                             Text("Previous")
                         }
+
 
                         Text(
                             text =
@@ -482,6 +554,7 @@ class MainActivity : ComponentActivity() {
                                     "Page $currentPage"
                                 }
                         )
+
 
                         TextButton(
 
@@ -495,6 +568,7 @@ class MainActivity : ComponentActivity() {
                             }
 
                         ) {
+
                             Text("Next")
                         }
                     }
@@ -502,6 +576,7 @@ class MainActivity : ComponentActivity() {
             }
 
         ) { padding ->
+
 
             Box(
 
@@ -527,10 +602,12 @@ class MainActivity : ComponentActivity() {
                         fontSize = 80.sp
                     )
 
+
                     Spacer(
                         modifier =
                             Modifier.height(12.dp)
                     )
+
 
                     Text(
                         text = "PDF Reader",
@@ -540,15 +617,30 @@ class MainActivity : ComponentActivity() {
                                 .headlineSmall
                     )
 
+
                     Spacer(
                         modifier =
                             Modifier.height(8.dp)
                     )
 
+
+                    Text(
+                        text =
+                            "Currently reading: ${book.name}"
+                    )
+
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(8.dp)
+                    )
+
+
                     Text(
                         text =
                             "Page $currentPage"
                     )
+
 
                     if (highlightCount > 0) {
 
@@ -556,6 +648,7 @@ class MainActivity : ComponentActivity() {
                             modifier =
                                 Modifier.height(12.dp)
                         )
+
 
                         Text(
                             text =
@@ -566,6 +659,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+
         if (showNoteDialog) {
 
             AlertDialog(
@@ -574,9 +668,11 @@ class MainActivity : ComponentActivity() {
                     showNoteDialog = false
                 },
 
+
                 title = {
                     Text("📝 Add Note")
                 },
+
 
                 text = {
 
@@ -597,24 +693,30 @@ class MainActivity : ComponentActivity() {
                     )
                 },
 
+
                 confirmButton = {
 
                     TextButton(
+
                         onClick = {
                             showNoteDialog = false
                         }
+
                     ) {
 
                         Text("Save")
                     }
                 },
 
+
                 dismissButton = {
 
                     TextButton(
+
                         onClick = {
                             showNoteDialog = false
                         }
+
                     ) {
 
                         Text("Cancel")
@@ -622,6 +724,7 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
+
 
         if (showAiDialog) {
 
@@ -631,105 +734,102 @@ class MainActivity : ComponentActivity() {
                     showAiDialog = false
                 },
 
+
                 title = {
-                    Text("🤖 AI Tools")
+                    Text("🤖 AI Reader")
                 },
+
 
                 text = {
 
                     Column {
 
                         TextButton(
+
                             onClick = {
                                 showAiDialog = false
                             }
+
                         ) {
+
                             Text(
                                 "✨ Summarize this page"
                             )
                         }
 
+
                         TextButton(
+
                             onClick = {
                                 showAiDialog = false
                             }
+
                         ) {
+
                             Text(
                                 "🧠 Explain this page"
                             )
                         }
 
+
                         TextButton(
+
                             onClick = {
                                 showAiDialog = false
                             }
+
                         ) {
+
                             Text(
                                 "🌍 Translate selected text"
                             )
                         }
 
+
                         TextButton(
+
                             onClick = {
                                 showAiDialog = false
                             }
+
                         ) {
+
                             Text(
                                 "💬 Ask about this book"
+                            )
+                        }
+
+
+                        TextButton(
+
+                            onClick = {
+                                showAiDialog = false
+                            }
+
+                        ) {
+
+                            Text(
+                                "🔊 Read with AI voice"
                             )
                         }
                     }
                 },
 
+
                 confirmButton = {
 
                     TextButton(
+
                         onClick = {
                             showAiDialog = false
                         }
+
                     ) {
+
                         Text("Close")
                     }
                 }
             )
         }
-    }
-
-    private fun speakPage(page: Int) {
-
-        val text =
-            "You are currently reading page $page in AI Reader."
-
-        val speaker =
-            TextToSpeech(
-                this
-            ) { status ->
-
-                if (status ==
-                    TextToSpeech.SUCCESS
-                ) {
-
-                    speakerLanguageAndSpeak(
-                        speaker,
-                        text
-                    )
-                }
-            }
-    }
-
-    private fun speakerLanguageAndSpeak(
-        speaker: TextToSpeech,
-        text: String
-    ) {
-
-        speaker.language =
-            java.util.Locale.US
-
-        speaker.speak(
-            text,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            "ai_reader_speech"
-        )
     }
 }
