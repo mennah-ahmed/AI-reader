@@ -1,10 +1,10 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.aireader.app
 
 import android.content.Intent
-import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Bundle
-import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
@@ -12,15 +12,35 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,120 +48,274 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
 
-data class Book(val name: String, val uri: Uri)
+data class Book(
+    val name: String,
+    val uri: Uri
+)
 
 class MainActivity : ComponentActivity() {
-    private var selectedUri by mutableStateOf<Uri?>(null)
-    private var selectedName by mutableStateOf("")
+
     private lateinit var tts: TextToSpeech
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        tts = TextToSpeech(this) { tts.language = Locale.US }
+
+        tts = TextToSpeech(this) { result ->
+            if (result == TextToSpeech.SUCCESS) {
+                tts.language = Locale.US
+            }
+        }
+
         setContent {
             MaterialTheme {
-                AIReaderApp(
-                    selectedUri = selectedUri,
-                    selectedName = selectedName,
-                    onOpenPdf = { selectedUri = it.first; selectedName = it.second },
-                    onCloseReader = { selectedUri = null }
-                )
+                AIReaderApp()
             }
         }
     }
 
     override fun onDestroy() {
-        if (::tts.isInitialized) tts.shutdown()
+        if (::tts.isInitialized) {
+            tts.stop()
+            tts.shutdown()
+        }
         super.onDestroy()
     }
 
-    private fun displayName(uri: Uri): String {
+    private fun getFileName(uri: Uri): String {
         var name = "PDF Book"
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
-            if (it.moveToFirst()) name = it.getString(0) ?: name
+
+        contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+
+            if (cursor.moveToFirst()) {
+                val index =
+                    cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+
+                if (index >= 0) {
+                    name = cursor.getString(index) ?: name
+                }
+            }
         }
+
         return name
     }
 
     @Composable
-    fun AIReaderApp(
-        selectedUri: Uri?,
-        selectedName: String,
-        onOpenPdf: (Pair<Uri,String>) -> Unit,
-        onCloseReader: () -> Unit
-    ) {
-        if (selectedUri != null) {
-            ReaderScreen(selectedUri, selectedName, onCloseReader)
+    private fun AIReaderApp() {
+
+        var selectedBook by remember {
+            mutableStateOf<Book?>(null)
+        }
+
+        if (selectedBook == null) {
+            HomeScreen(
+                onBookSelected = {
+                    selectedBook = it
+                }
+            )
         } else {
-            HomeScreen(onOpenPdf)
+            ReaderScreen(
+                book = selectedBook!!,
+                onBack = {
+                    selectedBook = null
+                }
+            )
         }
     }
 
     @Composable
-    fun HomeScreen(onOpenPdf: (Pair<Uri,String>) -> Unit) {
-        var books by remember { mutableStateOf(listOf<Book>()) }
-        val launcher = rememberLauncherForActivityResult(
-            ActivityResultContracts.OpenDocument()
-        ) { uri ->
-            uri?.let {
-                contentResolver.takePersistableUriPermission(
-                    it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-                val b = Book(displayName(it), it)
-                books = (books + b).distinctBy { x -> x.uri.toString() }
-            }
+    private fun HomeScreen(
+        onBookSelected: (Book) -> Unit
+    ) {
+
+        var books by remember {
+            mutableStateOf<List<Book>>(emptyList())
         }
 
-        Scaffold(
-            topBar = {
-                TopAppBar(title = { Text("AI Reader", fontSize = 24.sp) })
-            },
-            floatingActionButton = {
-                FloatingActionButton(onClick = {
-                    launcher.launch(arrayOf("application/pdf"))
-                }) { Text("+", fontSize = 28.sp) }
+        val pdfLauncher =
+            rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri ->
+
+                if (uri != null) {
+
+                    try {
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (_: Exception) {
+                    }
+
+                    val book = Book(
+                        name = getFileName(uri),
+                        uri = uri
+                    )
+
+                    books =
+                        (books + book).distinctBy {
+                            it.uri.toString()
+                        }
+                }
             }
-        ) { pad ->
+
+        Scaffold(
+
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "AI Reader",
+                            fontSize = 24.sp
+                        )
+                    }
+                )
+            },
+
+            floatingActionButton = {
+
+                FloatingActionButton(
+                    onClick = {
+                        pdfLauncher.launch(
+                            arrayOf("application/pdf")
+                        )
+                    }
+                ) {
+                    Text(
+                        text = "+",
+                        fontSize = 28.sp
+                    )
+                }
+            }
+
+        ) { padding ->
+
             Column(
-                modifier = Modifier.fillMaxSize().padding(pad).padding(16.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp)
             ) {
-                Text("Your Library", style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = "📚 My Library",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+
                 if (books.isEmpty()) {
+
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp)
+                        shape = RoundedCornerShape(20.dp)
                     ) {
+
                         Column(
-                            Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(30.dp),
+
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally
                         ) {
-                            Text("📚", fontSize = 48.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Text("No books yet")
-                            Text("Tap + to add a PDF")
+
+                            Text(
+                                text = "📖",
+                                fontSize = 60.sp
+                            )
+
+                            Spacer(
+                                modifier = Modifier.height(12.dp)
+                            )
+
+                            Text(
+                                text = "No books yet",
+                                style =
+                                    MaterialTheme.typography.titleLarge
+                            )
+
+                            Spacer(
+                                modifier = Modifier.height(6.dp)
+                            )
+
+                            Text(
+                                text =
+                                    "Tap + to add your first PDF"
+                            )
                         }
                     }
+
                 } else {
+
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+
+                        columns =
+                            GridCells.Fixed(2),
+
+                        modifier =
+                            Modifier.fillMaxSize(),
+
+                        horizontalArrangement =
+                            Arrangement.spacedBy(12.dp),
+
+                        verticalArrangement =
+                            Arrangement.spacedBy(12.dp)
+
                     ) {
+
                         items(books) { book ->
+
                             Card(
-                                modifier = Modifier.fillMaxWidth().clickable {
-                                    onOpenPdf(book.uri to book.name)
-                                },
-                                shape = RoundedCornerShape(18.dp)
+
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onBookSelected(book)
+                                        },
+
+                                shape =
+                                    RoundedCornerShape(18.dp)
+
                             ) {
-                                Column(Modifier.padding(16.dp)) {
-                                    Text("📕", fontSize = 42.sp)
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(book.name, maxLines = 2)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text("Tap to read", fontSize = 12.sp)
+
+                                Column(
+                                    modifier =
+                                        Modifier.padding(16.dp)
+                                ) {
+
+                                    Text(
+                                        text = "📕",
+                                        fontSize = 45.sp
+                                    )
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(8.dp)
+                                    )
+
+                                    Text(
+                                        text = book.name,
+                                        maxLines = 2
+                                    )
+
+                                    Spacer(
+                                        modifier =
+                                            Modifier.height(5.dp)
+                                    )
+
+                                    Text(
+                                        text = "Tap to read",
+                                        fontSize = 12.sp
+                                    )
                                 }
                             }
                         }
@@ -152,90 +326,374 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun ReaderScreen(uri: Uri, title: String, onBack: () -> Unit) {
-        var page by remember { mutableIntStateOf(0) }
-        var totalPages by remember { mutableIntStateOf(0) }
-        var showAi by remember { mutableStateOf(false) }
-        var note by remember { mutableStateOf("") }
-        var highlights by remember { mutableStateOf(listOf<Color>()) }
+    private fun ReaderScreen(
+        book: Book,
+        onBack: () -> Unit
+    ) {
 
-        LaunchedEffect(uri) {
-            totalPages = try {
-                contentResolver.openFileDescriptor(uri, "r")?.use { PdfRenderer(it).pageCount } ?: 0
-            } catch (_: Exception) { 0 }
+        var currentPage by remember {
+            mutableIntStateOf(1)
+        }
+
+        var totalPages by remember {
+            mutableIntStateOf(0)
+        }
+
+        var showAiDialog by remember {
+            mutableStateOf(false)
+        }
+
+        var note by remember {
+            mutableStateOf("")
+        }
+
+        var showNote by remember {
+            mutableStateOf(false)
+        }
+
+        var highlightCount by remember {
+            mutableIntStateOf(0)
+        }
+
+        LaunchedEffect(book.uri) {
+
+            totalPages =
+                try {
+
+                    contentResolver
+                        .openFileDescriptor(
+                            book.uri,
+                            "r"
+                        )
+                        ?.use { descriptor ->
+
+                            android.graphics.pdf.PdfRenderer(
+                                descriptor
+                            ).use { renderer ->
+                                renderer.pageCount
+                            }
+                        } ?: 0
+
+                } catch (_: Exception) {
+                    0
+                }
         }
 
         Scaffold(
+
             topBar = {
+
                 TopAppBar(
-                    title = { Text(title, maxLines = 1) },
+
+                    title = {
+                        Text(
+                            text = book.name,
+                            maxLines = 1
+                        )
+                    },
+
                     navigationIcon = {
-                        TextButton(onClick = onBack) { Text("←") }
+
+                        TextButton(
+                            onClick = onBack
+                        ) {
+                            Text("←")
+                        }
                     }
                 )
             },
+
             bottomBar = {
-                Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface
+                            )
+                ) {
+
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp),
+
+                        horizontalArrangement =
+                            Arrangement.SpaceEvenly
                     ) {
-                        TextButton(onClick = { showAi = true }) { Text("🤖 AI") }
-                        TextButton(onClick = {
-                            tts.speak("AI Reader. Page ${page + 1}", TextToSpeech.QUEUE_FLUSH, null, "page")
-                        }) { Text("🔊 Read") }
-                        TextButton(onClick = { note = "New note..." }) { Text("📝 Note") }
-                        TextButton(onClick = {
-                            highlights = highlights + Color.Yellow
-                        }) { Text("🖍 Highlight") }
+
+                        TextButton(
+                            onClick = {
+                                showAiDialog = true
+                            }
+                        ) {
+                            Text("🤖 AI")
+                        }
+
+                        TextButton(
+                            onClick = {
+
+                                tts.speak(
+                                    "AI Reader. Page $currentPage",
+                                    TextToSpeech.QUEUE_FLUSH,
+                                    null,
+                                    "ai-reader-page"
+                                )
+                            }
+                        ) {
+                            Text("🔊 Read")
+                        }
+
+                        TextButton(
+                            onClick = {
+                                showNote = true
+                            }
+                        ) {
+                            Text("📝 Note")
+                        }
+
+                        TextButton(
+                            onClick = {
+                                highlightCount++
+                            }
+                        ) {
+                            Text("🖍 Highlight")
+                        }
                     }
+
                     Row(
-                        Modifier.fillMaxWidth().padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = { if (page > 0) page-- }) { Text("Previous") }
-                        Text("${if (totalPages == 0) 0 else page + 1} / $totalPages")
-                        TextButton(onClick = { if (page + 1 < totalPages) page++ }) { Text("Next") }
+
+                        TextButton(
+                            enabled = currentPage > 1,
+                            onClick = {
+                                if (currentPage > 1) {
+                                    currentPage--
+                                }
+                            }
+                        ) {
+                            Text("Previous")
+                        }
+
+                        Text(
+                            text =
+                                "$currentPage / $totalPages"
+                        )
+
+                        TextButton(
+                            enabled =
+                                currentPage < totalPages,
+
+                            onClick = {
+                                if (currentPage < totalPages) {
+                                    currentPage++
+                                }
+                            }
+                        ) {
+                            Text("Next")
+                        }
                     }
                 }
             }
-        ) { pad ->
-            Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("📖", fontSize = 70.sp)
-                    Text("PDF page ${page + 1}", style = MaterialTheme.typography.headlineSmall)
-                    Spacer(Modifier.height(8.dp))
-                    Text("PDF rendering module is ready for the next build step.")
-                    if (note.isNotEmpty()) {
-                        Spacer(Modifier.height(16.dp))
-                        OutlinedTextField(
-                            value = note,
-                            onValueChange = { note = it },
-                            label = { Text("Note") }
+
+        ) { padding ->
+
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+
+                contentAlignment =
+                    Alignment.Center
+            ) {
+
+                Column(
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
+
+                    Text(
+                        text = "📖",
+                        fontSize = 80.sp
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(12.dp)
+                    )
+
+                    Text(
+                        text =
+                            "PDF Reader",
+                        style =
+                            MaterialTheme
+                                .typography
+                                .headlineSmall
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(8.dp)
+                    )
+
+                    Text(
+                        text =
+                            "Page $currentPage"
+                    )
+
+                    if (highlightCount > 0) {
+
+                        Spacer(
+                            modifier =
+                                Modifier.height(12.dp)
                         )
-                    }
-                    if (highlights.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text("Highlights saved: ${highlights.size}")
+
+                        Text(
+                            text =
+                                "🖍 Highlights: $highlightCount"
+                        )
                     }
                 }
             }
         }
 
-        if (showAi) {
+        if (showNote) {
+
             AlertDialog(
-                onDismissRequest = { showAi = false },
-                title = { Text("AI Tools") },
+
+                onDismissRequest = {
+                    showNote = false
+                },
+
+                title = {
+                    Text("📝 Add Note")
+                },
+
                 text = {
-                    Column {
-                        TextButton(onClick = { showAi = false }) { Text("✨ Summarize this page") }
-                        TextButton(onClick = { showAi = false }) { Text("🧠 Explain this page") }
-                        TextButton(onClick = { showAi = false }) { Text("🌍 Translate selected text") }
-                        TextButton(onClick = { showAi = false }) { Text("💬 Ask about this book") }
+
+                    OutlinedTextField(
+
+                        value = note,
+
+                        onValueChange = {
+                            note = it
+                        },
+
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        label = {
+                            Text("Your note")
+                        }
+                    )
+                },
+
+                confirmButton = {
+
+                    TextButton(
+                        onClick = {
+                            showNote = false
+                        }
+                    ) {
+                        Text("Save")
                     }
                 },
+
+                dismissButton = {
+
+                    TextButton(
+                        onClick = {
+                            showNote = false
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showAiDialog) {
+
+            AlertDialog(
+
+                onDismissRequest = {
+                    showAiDialog = false
+                },
+
+                title = {
+                    Text("🤖 AI Tools")
+                },
+
+                text = {
+
+                    Column {
+
+                        TextButton(
+                            onClick = {
+                                showAiDialog = false
+                            }
+                        ) {
+                            Text(
+                                "✨ Summarize this page"
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+                                showAiDialog = false
+                            }
+                        ) {
+                            Text(
+                                "🧠 Explain this page"
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+                                showAiDialog = false
+                            }
+                        ) {
+                            Text(
+                                "🌍 Translate selected text"
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+                                showAiDialog = false
+                            }
+                        ) {
+                            Text(
+                                "💬 Ask about this book"
+                            )
+                        }
+                    }
+                },
+
                 confirmButton = {
-                    TextButton(onClick = { showAi = false }) { Text("Close") }
+
+                    TextButton(
+                        onClick = {
+                            showAiDialog = false
+                        }
+                    ) {
+                        Text("Close")
+                    }
                 }
             )
         }
